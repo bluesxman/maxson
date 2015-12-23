@@ -64,8 +64,10 @@
   (assoc db-spec :subname (format "%s/db%05d" db-dir i)))
 
 (defn dbs
-  [base-spec db-dir num-dbs]
-  (map (partial spec base-spec db-dir) (range num-dbs)))
+  ([num-dbs]
+    (dbs db-spec db-dir num-dbs))
+  ([base-spec db-dir num-dbs]
+   (map (partial spec base-spec db-dir) (range num-dbs))))
 
 (defn gen-all
   [spec dir db-count rows]

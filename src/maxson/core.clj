@@ -1,35 +1,58 @@
 (ns maxson.core
   (:require [clojure.java.jdbc :as jdbc]))
 
-(def db-spec
-  {:classname   "org.h2.Driver"
-   :subprotocol "h2:file"
-   :subname     "./resources/db1"
-   :user        "runner"
-   :password    "runner"})
+;; union (distinct)
+;; sum
+;; average
+;; median
+;; sort (order by)
+;; min / max
 
-;(def conn (j/get-connection db-settings))
 
-(jdbc/db-do-commands db-spec
-                     (jdbc/create-table-ddl :fruit
-                                            [:name "varchar(32)"]
-                                            [:appearance "varchar(32)"]
-                                            [:cost :int]
-                                            [:grade :real]))
+(defprotocol distributed
+  (reduce [this row] [this accum row])
+  (combine [x1 x2])
+  (finalize [x]))
 
-(jdbc/query db-spec "select * from fruit")
+(defrecord Distributed [reduce combine finalize])
 
-(jdbc/insert! db-spec :fruit
-              {:name "banana"
-               :appearance "green"
-               :cost 1
-               :grade 0.9}
-              {:name "apple"
-               :appearance "shiny"
-               :cost 2
-               :grade 0.95}
-              {:name "tomato"
-               :appearance "bruised"
-               :cost 3
-               :grade 0.3}
-              )
+(def average1
+  (->Distributed
+    #(vector (:total %) (:count %))
+    #(apply + %)
+    #(/ (% 0) (% 1))))
+
+(defrecord Average [column]
+  distributed
+  (reduce [_ row] [(column row) 1])
+  (reduce [_ [total count] row]
+    [(+ total (column row)) (inc count)])
+  (combine [[t1 c1] [t2 c2]]
+    [(+ t1 t2) (+ c1 c2)])
+  (finalize [[total count]]
+    (/ total count)))
+
+(def average2
+  (->Distributed
+    (fn [[total count] row]
+      [(+ total (:price row)) (inc count)])
+    #(apply + %)
+    #(/ (% 0) (% 1))))
+
+(defn average
+  [column]
+  {:init [0 0]
+   :reduce (fn [[total count] row]
+            [(+ total (column row)) (inc count)])
+   :combine (fn [[t1 c1] [t2 c2]]
+              [(+ t1 t2) (+ c1 c2)])
+   :finalize (fn [total count]
+               (/ total count))})
+
+(defn process
+  [dbs query {:keys [init rdc combine finalize]}]
+  (loop [[d & ds] dbs
+         rval init]
+    (if-let [r (reduce rdc init (apply jdbc/query d query))]
+      (recur ds (combine rval r))
+      (finalize rval))))

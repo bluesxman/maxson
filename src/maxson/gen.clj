@@ -70,7 +70,7 @@
    (map (partial spec base-spec db-dir) (range num-dbs))))
 
 (defn gen-all
-  [spec dir db-count rows]
-  (doseq [db (dbs spec dir db-count)]
+  [dbs rows]
+  (doseq [db dbs]
     (init db)
     (populate :produce item rows db)))

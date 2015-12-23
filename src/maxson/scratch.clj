@@ -28,3 +28,11 @@
                :cost 3
                :grade 0.3}
               )
+
+
+(def q (partial jdbc/query {:classname "org.h2.Driver",
+                            :subprotocol "h2:file",
+                            :subname "./test/data/db00004",
+                            :user "runner",
+                            :password "runner"}))
+(q ["select * from produce where name = ?" "lettuce"])

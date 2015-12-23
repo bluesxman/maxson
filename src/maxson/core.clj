@@ -1,6 +1,7 @@
 (ns maxson.core
   (:require [maxson.gen :refer [dbs]]
-            [clojure.java.jdbc :as jdbc]))
+            [clojure.java.jdbc :as jdbc]
+            [clojure.core.reducers :as r]))
 
 ;; union (distinct)
 ;; sum
@@ -8,6 +9,7 @@
 ;; median
 ;; sort (order by)
 ;; min / max
+;; filter/remove
 
 
 ;(defprotocol distributed
@@ -42,31 +44,39 @@
 
 (defn average
   [column]
-  {:init     [0 0]
-   :foldl    (fn [[total count] row]
-               [(+ total (column row)) (inc count)])
-   :combine  (fn [[t1 c1] [t2 c2]]
-               [(+ t1 t2) (+ c1 c2)])
+  {:fold     (fn
+               ([] [0 0])
+               ([[total count] row]
+                [(+ total (column row)) (inc count)]))
+   :combine  (fn
+               ([] [0 0])
+               ([[t1 c1] [t2 c2]]
+                  [(+ t1 t2) (+ c1 c2)]))
    :finalize (fn [[total count]]
                (/ total count))})
 
 (defn process
-  [dbs query {:keys [init foldl combine finalize]}]
+  [dbs query {:keys [fold combine finalize]}]
   (loop [[d & ds] dbs
-         rval init]
+         rval (fold)]
     (if d
-      (let [r (reduce foldl init (jdbc/query d query))]
+      (let [r (reduce fold (fold) (jdbc/query d query))]
         (recur ds (combine rval r)))
       (finalize rval))))
 
-(def q (partial jdbc/query {:classname "org.h2.Driver",
-                            :subprotocol "h2:file",
-                            :subname "./test/data/db00004",
-                            :user "runner",
-                            :password "runner"}))
-(q ["select * from produce where name = ?" "lettuce"])
+(def group-size 512)
+(defn process
+  [dbs query {:keys [fold combine finalize]}]
+  (let [db-fold (fn
+                  ([] (fold))
+                  ([accum db]
+                   (combine
+                     accum
+                     (reduce fold (fold) (jdbc/query db query)))))]
+    (finalize (r/fold group-size combine db-fold dbs))))
 
-(def databases (maxson.gen/dbs 100))
+
+(def databases (dbs 100))
 (process
   databases
   ["select * from produce where name = ?" "lettuce"]

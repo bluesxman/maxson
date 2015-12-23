@@ -36,3 +36,5 @@
                             :user "runner",
                             :password "runner"}))
 (q ["select * from produce where name = ?" "lettuce"])
+
+(gen-all (dbs 100) 10000)

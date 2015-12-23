@@ -64,7 +64,7 @@
         (recur ds (combine rval r)))
       (finalize rval))))
 
-(def group-size 512)
+(def group-size 25)
 (defn process
   [dbs query {:keys [fold combine finalize]}]
   (let [db-fold (fn
@@ -76,8 +76,10 @@
     (finalize (r/fold group-size combine db-fold dbs))))
 
 
-(def databases (dbs 100))
-(process
-  databases
-  ["select * from produce where name = ?" "lettuce"]
-  (average :cost))
+(def databases (vec (dbs 100)))
+(time
+  (process
+   databases
+   ["select * from produce"]
+   ;["select * from produce where name = ?" "lettuce"]
+   (average :cost)))
